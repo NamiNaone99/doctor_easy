@@ -27,11 +27,9 @@ export default function DashboardLayout({
           <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
             <MobileNav />
             {/* <DashboardBreadcrumb /> */}
-            {/* <SearchInput /> */}
-            <div className="ml-auto flex items-center gap-4">
-              <User />
-              <ModeToggle />
-            </div>
+            <SearchInput />
+            <User />
+            <ModeToggle />
           </header>
           <main className="grid flex-1 items-start gap-2 p-4 sm:px-6 sm:py-0 md:gap-4 bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-[#141414] dark:to-[#1A1A1A]">
             {children}

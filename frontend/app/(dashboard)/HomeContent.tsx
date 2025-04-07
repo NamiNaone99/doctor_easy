@@ -26,7 +26,7 @@ export default function ProductsContent({ search, offset }: ProductsContentProps
       </motion.div>
 
       {/* Overview Cards - Animate from left */}
-      {/* <motion.div
+      <motion.div
         initial={{ opacity: 0, x: -100 }}
         whileInView={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.5, delay: 0.1 }}
@@ -60,7 +60,7 @@ export default function ProductsContent({ search, offset }: ProductsContentProps
             <span className="text-2xl font-semibold text-[#FFE100]">92.5%</span>
           </CardContent>
         </Card>
-      </motion.div> */}
+      </motion.div>
 
       {/* Section 1: Overview - Animate upward */}
       <motion.section
