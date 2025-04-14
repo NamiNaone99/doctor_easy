@@ -460,7 +460,7 @@ export default function ModelManagement() {
                                       </Button>
                                     </motion.div>
                                   </DialogTrigger>
-                                  <DialogContent>
+                                  <DialogContent className="rounded-lg sm:rounded-lg">
                                     <DialogHeader>
                                       <DialogTitle>Are you sure?</DialogTitle>
                                     </DialogHeader>
@@ -469,7 +469,7 @@ export default function ModelManagement() {
                                       you want to delete model{' '}
                                       <strong>{deleteModelName}</strong>?
                                     </p>
-                                    <DialogFooter>
+                                    <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 mt-4">
                                       <Button
                                         variant="secondary"
                                         onClick={() =>
@@ -481,6 +481,7 @@ export default function ModelManagement() {
                                       <Button
                                         variant="destructive"
                                         onClick={confirmDelete}
+                                        className="mb-2 sm:mb-0"
                                       >
                                         Confirm
                                       </Button>
@@ -530,7 +531,9 @@ export default function ModelManagement() {
                 animate="visible"
                 exit="exit"
               >
-                <h2 className="text-xl font-bold mb-4">Upload New Data and Create New Model</h2>
+                <h2 className="text-xl font-bold mb-4">
+                  Upload New Data and Create New Model
+                </h2>
                 <Label>Name</Label>
                 <Input
                   value={newModel.name}
