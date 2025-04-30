@@ -15,7 +15,6 @@ import {
 } from '@/components/ui/select';
 import { toast } from 'react-hot-toast';
 import Footer from '@/components/footer/page';
-import apiClient from '@/lib/axios';
 import { useUser } from 'context/UserContext';
 import {
   Dialog,
@@ -25,6 +24,7 @@ import {
   DialogTitle,
   DialogFooter
 } from '@/components/ui/dialog';
+import axios from 'axios';
 
 const Spinner = () => (
   <div className="animate-spin w-5 h-5 border-2 border-gray-300 border-t-2 border-t-blue-500 rounded-full"></div>
@@ -145,8 +145,9 @@ export default function ModelManagement() {
   useEffect(() => {
     const fetchModels = async () => {
       try {
-        const response =
-          await apiClient.get<AllModelResponse[]>('/api/v1/model/');
+        const response = await axios.get<AllModelResponse[]>('/api/v1/model', {
+          withCredentials: true
+        });
         setModels(response.data);
       } catch (error) {
         toast.error('Failed to fetch models');
@@ -190,10 +191,13 @@ export default function ModelManagement() {
           ? 'model_train'
           : 'model_train_xg_boost';
 
-      const response = await apiClient.post<AllModelResponse>(
+      const response = await axios.post<AllModelResponse>(
         `/api/v1/${route}?${queryParams.toString()}`,
         formData,
-        { headers: { 'Content-Type': 'multipart/form-data' } }
+        {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          withCredentials: true
+        }
       );
       // Update models state with the returned model data
       setModels([...models, response.data]);
@@ -236,10 +240,13 @@ export default function ModelManagement() {
         version: trainingVersion,
         description: trainingDescription
       });
-      const response = await apiClient.post<AllModelResponse>(
+      const response = await axios.post<AllModelResponse>(
         `/api/v1/model_train_xg_boost?${queryParams.toString()}`,
         formData,
-        { headers: { 'Content-Type': 'multipart/form-data' } }
+        {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          withCredentials: true
+        }
       );
       // Update models state with the returned model data
       setModels([...models, response.data]);
@@ -268,9 +275,12 @@ export default function ModelManagement() {
   // Update model metadata via PUT endpoint
   const handleEdit = async (modelName: string) => {
     try {
-      const response = await apiClient.put<AllModelResponse>(
+      const response = await axios.put<AllModelResponse>(
         `/api/v1/model/models/${modelName}`,
-        newModel as AllModelUpdate
+        newModel as AllModelUpdate,
+        {
+          withCredentials: true
+        }
       );
       setModels(
         models.map((model) =>
@@ -295,7 +305,9 @@ export default function ModelManagement() {
   // Delete model via DELETE endpoint
   const handleDelete = async (modelName: string) => {
     try {
-      await apiClient.delete(`/api/v1/model/${modelName}`);
+      await axios.delete(`/api/v1/model/${modelName}`, {
+        withCredentials: true
+      });
       setModels(models.filter((model) => model.name !== modelName));
       toast.success('Model deleted successfully!');
     } catch (error) {

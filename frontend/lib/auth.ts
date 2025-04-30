@@ -57,5 +57,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       session.is_admin = token.is_admin as boolean; // Add is_admin to the session
       return session;
     }
-  }
+  },
+  trustHost: true
 });

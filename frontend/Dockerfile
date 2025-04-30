@@ -3,6 +3,11 @@ FROM node:18-bullseye-slim
 # Set working directory
 WORKDIR /usr/app
 
+ARG NEXT_PUBLIC_BACKEND_URL
+ENV NEXT_PUBLIC_BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL}
+
+ARG NEXTAUTH_SECRET
+ENV NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
 # Install pnpm globally
 RUN npm install -g pnpm
 

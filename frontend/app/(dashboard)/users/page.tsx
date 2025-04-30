@@ -1,6 +1,5 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import apiClient from '@/lib/axios';
 import { User, UserUpdateData } from 'types/customer';
 import {
   Card,
@@ -24,6 +23,7 @@ import {
 import Footer from '@/components/footer/page';
 import { toast } from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
+import axios from 'axios';
 
 const UsersPage: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -77,7 +77,9 @@ const UsersPage: React.FC = () => {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const response = await apiClient.get<User[]>('/api/v1/users/');
+        const response = await axios.get<User[]>('/api/v1/users', {
+          withCredentials: true
+        });
         setUsers(response.data);
       } catch (err) {
         console.error('Error fetching users:', err);
@@ -101,7 +103,9 @@ const UsersPage: React.FC = () => {
 
   const handleDeleteClick = async (userId: number) => {
     try {
-      await apiClient.delete(`/api/v1/users/${userId}`);
+      await axios.delete(`/api/v1/users/${userId}`, {
+        withCredentials: true
+      });
       setUsers(users.filter((cust) => cust.id !== userId));
       toast.success('User deleted successfully');
     } catch (err) {
@@ -123,9 +127,12 @@ const UsersPage: React.FC = () => {
     if (!selectedUser) return;
 
     try {
-      const response = await apiClient.put<User>(
+      const response = await axios.put<User>(
         `/api/v1/users/${selectedUser.id}`,
-        formData
+        formData,
+        {
+          withCredentials: true
+        }
       );
       setUsers((prev) =>
         prev.map((cust) => (cust.id === selectedUser.id ? response.data : cust))

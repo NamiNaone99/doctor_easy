@@ -23,10 +23,10 @@ import {
 } from '@/components/ui/select';
 import Footer from '@/components/footer/page';
 import { toast } from 'react-hot-toast';
-import apiClient from '@/lib/axios';
 import { Model } from 'types/model';
 import * as RadixTooltip from '@radix-ui/react-tooltip';
 import { motion } from 'framer-motion';
+import axios from 'axios';
 
 const initialFormData = {
   sex: '',
@@ -119,7 +119,9 @@ export default function PredictionPage() {
   useEffect(() => {
     const fetchModels = async () => {
       try {
-        const response = await apiClient.get('/api/v1/model/');
+        const response = await axios.get('/api/v1/model', {
+          withCredentials: true
+        });
         setModels(response.data);
       } catch (error) {
         console.error('Error fetching models:', error);
@@ -153,7 +155,7 @@ export default function PredictionPage() {
 
     setIsLoading(true);
     try {
-      const response = await apiClient.post(
+      const response = await axios.post(
         `/api/v1/nn/${selectedModel}`,
         {
           model_tag: selectedModel,

@@ -1,0 +1,88 @@
+name: Sync Folders to External Repos
+
+on:
+  push:
+    branches:
+      - main # Adjust if your branch is different
+    paths:
+      - "frontend/**"
+      - "backend/**"
+
+jobs:
+  sync-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Monorepo
+        uses: actions/checkout@v4
+
+      - name: Copy Backend Files
+        run: |
+          mkdir -p backend_temp
+          cp -r backend/. backend_temp/
+
+      - name: Checkout Target Backend Repo
+        uses: actions/checkout@v4
+        with:
+          repository: blackfenzer/meniscus-backend-repo
+          token: ${{ secrets.FINAL }}
+          path: backend_repo
+          fetch-depth: 0
+
+      - name: Update Backend Repo
+        run: |
+          cd backend_repo
+          # Remove existing files except .git directory
+          find . -mindepth 1 -maxdepth 1 -not -name '.git' -exec rm -rf {} +
+          # Copy new backend files
+          cp -r ../backend_temp/. .
+          git config user.email "actions@github.com"
+          git config user.name "GitHub Actions"
+          git add --all
+          # Check if there are changes to commit
+          if ! git diff --cached --quiet; then
+            git commit -m "Update backend from monorepo"
+            git push
+          else
+            echo "No changes to commit."
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.FINAL }}
+
+  sync-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Monorepo
+        uses: actions/checkout@v4
+
+      - name: Copy Frontend Files
+        run: |
+          mkdir -p frontend_temp
+          cp -r frontend/. frontend_temp/
+
+      - name: Checkout Target Frontend Repo
+        uses: actions/checkout@v4
+        with:
+          repository: blackfenzer/meniscus-frontend-repo
+          token: ${{ secrets.FINAL }}
+          path: frontend_repo
+          fetch-depth: 0
+
+      - name: Update Frontend Repo
+        run: |
+          cd frontend_repo
+          # Remove existing files except .git directory
+          find . -mindepth 1 -maxdepth 1 -not -name '.git' -exec rm -rf {} +
+          # Copy new frontend files
+          cp -r ../frontend_temp/. .
+          git config user.email "actions@github.com"
+          git config user.name "GitHub Actions"
+          git add --all
+          # Check if there are changes to commit
+          if ! git diff --cached --quiet; then
+            git commit -m "Update frontend from monorepo"
+            git push
+          else
+            echo "No changes to commit."
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.FINAL }}
