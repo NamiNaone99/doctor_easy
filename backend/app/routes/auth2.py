@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Response, Request, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from itsdangerous import URLSafeTimedSerializer
 from pydantic import BaseModel
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, timezone
 import secrets
 from jose import JWTError, jwt
 from app.database.session import get_db
@@ -15,11 +15,14 @@ router = APIRouter()
 # Secret keys for signing cookies & CSRF tokens
 SECRET_KEY = os.getenv("SECRET_KEY")
 CSRF_SECRET = os.getenv("CSRF_SECRET")
-COOKIE_NAME = os.getenv("COOKIE_NAME")
-CSRF_COOKIE_NAME = os.getenv("CSRF_COOKIE_NAME")
+COOKIE_NAME = os.getenv("COOKIE_NAME", "session_token")
+CSRF_COOKIE_NAME = os.getenv("CSRF_COOKIE_NAME", "csrf_token")
+COOKIE_DOMAIN = os.getenv("COOKIE_DOMAIN", None)  # e.g. ".noboru.tech"
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+IS_PRODUCTION = ENVIRONMENT == "production"
 
-SECRET_KEY = os.getenv("SECRET_KEY")  # Use environment variable in production
-ALGORITHM = os.getenv("ALGORITHM")
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 # Serializer for signed cookies
 serializer = URLSafeTimedSerializer(SECRET_KEY)
@@ -46,7 +49,7 @@ class RegisterRequest(BaseModel):
 # Utility functions
 def create_access_token(data: dict):
     to_encode = data.copy()
-    expire = datetime.now() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -170,26 +173,28 @@ async def login(
     # Generate CSRF token
     csrf_token = secrets.token_urlsafe(32)
 
+    # Build cookie kwargs — domain is optional
+    cookie_kwargs = dict(
+        httponly=True,
+        secure=IS_PRODUCTION,
+        samesite="lax",
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
+    if COOKIE_DOMAIN:
+        cookie_kwargs["domain"] = COOKIE_DOMAIN
+
     # Set HTTP-only cookie for JWT token
     response.set_cookie(
         COOKIE_NAME,
         access_token,
-        httponly=True,  # Make cookie HTTP-only
-        secure=True,  # Only send over HTTPS
-        samesite="none",  # Protect against CSRF
-        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,  # Convert to seconds
-        domain=".onrender.com",
+        **cookie_kwargs,
     )
 
     # Set CSRF token cookie (not HTTP-only so JavaScript can read it)
     response.set_cookie(
         "csrf_token",
         csrf_token,
-        httponly=True,
-        secure=True,
-        samesite="none",
-        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        domain=".onrender.com",
+        **cookie_kwargs,
     )
 
     return {
@@ -201,8 +206,11 @@ async def login(
 
 @router.post("/logout")
 async def logout(response: Response):
-    response.delete_cookie(COOKIE_NAME)
-    response.delete_cookie("csrf_token")
+    cookie_del_kwargs = {}
+    if COOKIE_DOMAIN:
+        cookie_del_kwargs["domain"] = COOKIE_DOMAIN
+    response.delete_cookie(COOKIE_NAME, **cookie_del_kwargs)
+    response.delete_cookie("csrf_token", **cookie_del_kwargs)
     return {"message": "Logged out successfully"}
 
 

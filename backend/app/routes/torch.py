@@ -94,6 +94,7 @@ async def predict(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    model_name = model_name.strip()
     # Extract data from the request
     input_data = prediction_request.input_data.dict()
 

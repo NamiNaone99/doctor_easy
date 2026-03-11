@@ -1,41 +1,60 @@
 services:
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      target: runner
+      args:
+        - NEXT_PUBLIC_BACKEND_URL=https://medical.noboru.tech
+        - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-c_U6U-FJ_puSBV2MU9Esz5pvt54wrm8SxSFkZQFVHr1RIEY_5kLr1abbyGYPlCQW}
     container_name: next
     hostname: next
     ports:
       - "3010:3000"
+    env_file:
+      - ./frontend/.env
     environment:
-      - NEXT_PUBLIC_BACKEND_URL=http://fastapi:8000
-      - NEXTAUTH_URL=http://localhost:3010
+      - NEXT_PUBLIC_BACKEND_URL=https://medical.noboru.tech
+      - BACKEND_URL=http://fastapi:8000
+      - NEXTAUTH_URL=https://medical.noboru.tech
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-c_U6U-FJ_puSBV2MU9Esz5pvt54wrm8SxSFkZQFVHr1RIEY_5kLr1abbyGYPlCQW}
+      - AUTH_TRUST_HOST=true
     networks:
       - mynetwork
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3010"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
       interval: 30s
       timeout: 10s
       retries: 5
     depends_on:
       - fastapi
+    restart: unless-stopped
 
   fastapi:
-    build: ./backend
+    build:
+      context: ./backend
+      target: runner
     container_name: fastapi
+    env_file:
+      - ./backend/.env
     environment:
-      - STAGE=development
+      - STAGE=production
       - PYTHONUNBUFFERED=1
       - BENTOML_HOST=http://bentoml-service:3000/
     ports:
       - "8000:8000"
+    volumes:
+      - backend-data:/app/data
     networks:
       - mynetwork
     depends_on:
       - bentoml-service
+    restart: unless-stopped
 
   bentoml-service:
     build:
       context: ./backend/bentoml
       dockerfile: Dockerfile
+      target: runner
     ports:
       - "5010:3000"
     hostname: bentoml-service
@@ -48,15 +67,16 @@ services:
     networks:
       - mynetwork
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5010/healthz"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/healthz"]
       interval: 30s
       timeout: 10s
       retries: 5
+    restart: unless-stopped
 
   nginx:
     image: nginx:latest
     container_name: nginx
-    restart: always
+    restart: unless-stopped
     depends_on:
       - frontend
       - fastapi
@@ -68,6 +88,22 @@ services:
     networks:
       - mynetwork
 
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
+      - ./cloudflared/credentials.json:/etc/cloudflared/credentials.json:ro
+    networks:
+      - mynetwork
+    depends_on:
+      - nginx
+
 networks:
   mynetwork:
     driver: bridge
+
+volumes:
+  backend-data:

@@ -7,6 +7,7 @@ import torch
 from typing import Any, Dict, List
 from loguru import logger
 import os
+import re
 import sys
 import uuid
 from pathlib import Path
@@ -59,6 +60,16 @@ else:
     )
 
 model_cache = {}
+
+
+def sanitize_tag_name(name: str) -> str:
+    """Sanitize a user-provided name into a valid BentoML tag.
+    Rules: lowercase alphanumeric, '_', '-', '.'; must start/end with alphanumeric."""
+    name = name.lower().strip()
+    name = name.replace(" ", "_")          # spaces → underscores
+    name = re.sub(r"[^a-z0-9._-]", "", name)  # remove invalid chars
+    name = name.strip("._-")               # must start/end with alphanumeric
+    return name or "model"
 
 feature_names = [
                     "sex",
@@ -123,7 +134,7 @@ class TrainModelInput(BaseModel):
 
 
 @bentoml.service(
-    traffic={"timeout": 30},
+    traffic={"timeout": 600},
     resources={"cpu": "1"},
 )
 class DynamicRegressionService:
@@ -145,7 +156,7 @@ class DynamicRegressionService:
 
                 if not token_payload:
                     logger.warning("Authentication failed - invalid token")
-                    return {"error": "Authentication failed"}, 401
+                    return {"error": "Authentication failed"}
 
                 # if not self.check_authorization(token_payload):
                 #     logger.warning(
@@ -164,17 +175,18 @@ class DynamicRegressionService:
                         # Access custom objects
                         bento_model = bentoml.models.get(model_tag)
                         scaler = bento_model.custom_objects["scaler"]
+                        feature_cols = bento_model.custom_objects.get("feature_columns", None)
                         logger.info("Model and scaler loaded")
                         model.eval()
-                        model_cache[model_tag] = (model, scaler)
+                        model_cache[model_tag] = (model, scaler, feature_cols)
                     except Exception as e:
-                        return {"error": f"Model loading failed: {str(e)}"}, 500
+                        return {"error": f"Model loading failed: {str(e)}"}
 
-                model, scaler = model_cache[model_tag]
+                model, scaler, feature_cols = model_cache[model_tag]
 
                 try:
                     # Extract numeric features in the correct order
-                    features = self.extract_features2(input_data)
+                    features = self.extract_features2(input_data, feature_cols)
                     # Convert features to a 2D numpy array
                     transformed = scaler.transform([features])
                     tensor_input = torch.tensor(transformed, dtype=torch.float32)
@@ -183,7 +195,7 @@ class DynamicRegressionService:
                         prediction = model(tensor_input).squeeze()
 
                     # Replace feature importance with SHAP values
-                    shap_values = self.get_shap_values(model, scaler, features)
+                    shap_values = self.get_shap_values(model, scaler, features, feature_cols)
                     logger.info("SHAP values shape", shape=np.shape(shap_values), values=shap_values)
 
                     prediction = prediction.cpu().numpy().tolist()
@@ -192,15 +204,15 @@ class DynamicRegressionService:
                     return {
                         "prediction": prediction,
                         "feature_importance": shap_values,
-                    }, 200
+                    }
 
                 except Exception as e:
                     logger.error("Prediction failed", error=str(e))
-                    return {"error": f"Prediction failed: {str(e)}"}, 500
+                    return {"error": f"Prediction failed: {str(e)}"}
 
             except Exception as e:
                 logger.critical("Unexpected error in prediction", error=str(e))
-                return {"error": "Internal server error"}, 500
+                return {"error": "Internal server error"}
             
     @bentoml.api
     async def predictxg(
@@ -218,7 +230,7 @@ class DynamicRegressionService:
                 token_payload = self.verify_token(payload.secure_token)
                 if not token_payload:
                     logger.warning("Authentication failed - invalid token")
-                    return {"error": "Authentication failed"}, 401
+                    return {"error": "Authentication failed"}
 
                 logger.info("Authentication successful", role=token_payload.get("role"))
 
@@ -228,16 +240,17 @@ class DynamicRegressionService:
                         model = bentoml.xgboost.load_model(model_tag)
                         bento_model = bentoml.models.get(model_tag)
                         scaler = bento_model.custom_objects["scaler"]
+                        feature_cols = bento_model.custom_objects.get("feature_columns", None)
                         logger.info("Model and scaler loaded")
-                        model_cache[model_tag] = (model, scaler)
+                        model_cache[model_tag] = (model, scaler, feature_cols)
                     except Exception as e:
-                        return {"error": f"Model loading failed: {str(e)}"}, 500
+                        return {"error": f"Model loading failed: {str(e)}"}
 
-                model, scaler = model_cache[model_tag]
+                model, scaler, feature_cols = model_cache[model_tag]
                 
                 try:
                     # Extract features as DataFrame and convert to array for scaling
-                    features_df = self.extract_features3(input_data)
+                    features_df = self.extract_features3(input_data, feature_cols)
                     features_array = features_df.to_numpy()  # Convert to numpy array
                     
                     # Scale features
@@ -251,22 +264,23 @@ class DynamicRegressionService:
                     # Calculate SHAP values using original DataFrame for feature names
                     shap_values = self.get_shap_values_xg(model, scaler, features_df)
                     shap_values = shap_values[0]
-                    feature_names = self.get_feature_names()  # Ensure this matches DataFrame columns
-                    shap_dict = {feature_names[i]: float(shap_values[i]) for i in range(len(feature_names))}
+                    # Use model's feature columns if available, otherwise fall back
+                    names = feature_cols if feature_cols else self.get_feature_names()
+                    shap_dict = {names[i]: float(shap_values[i]) for i in range(len(names))}
                     logger.info("SHAP values", values=shap_dict)
 
                     return {
                         "prediction": prediction.tolist(),
                         "feature_importance": shap_dict,  # Use the correct SHAP dictionary
-                    }, 200
+                    }
 
                 except Exception as e:
                     logger.error("Prediction failed", error=str(e))
-                    return {"error": f"Prediction failed: {str(e)}"}, 500
+                    return {"error": f"Prediction failed: {str(e)}"}
 
             except Exception as e:
                 logger.critical("Unexpected error", error=str(e))
-                return {"error": "Internal server error"}, 500
+                return {"error": "Internal server error"}
 
     @bentoml.api
     async def delete_model(self, payload: DeleteModelInput):
@@ -277,7 +291,7 @@ class DynamicRegressionService:
                 token_payload = self.verify_token(payload.secure_token)
                 if not token_payload:
                     logger.warning("Authentication failed - invalid token")
-                    return {"error": "Authentication failed"}, 401
+                    return {"error": "Authentication failed"}
 
                 # Optionally, check for appropriate permissions:
                 # if not self.check_authorization(token_payload):
@@ -296,10 +310,10 @@ class DynamicRegressionService:
                     return {"status": "success"}
                 except Exception as e:
                     logger.error("Model deletion failed", error=str(e))
-                    return {"status": "error", "message": str(e)}, 500
+                    return {"status": "error", "message": str(e)}
             except Exception as e:
                 logger.critical("Unexpected error in deletion", error=str(e))
-                return {"error": "Internal server error"}, 500
+                return {"error": "Internal server error"}
 
     @bentoml.api
     async def delete_all_models(self):
@@ -349,15 +363,15 @@ class DynamicRegressionService:
                         models_info.append(model_info)
 
                     logger.success(f"Retrieved {len(models_info)} models successfully")
-                    return {"models": models_info}, 200
+                    return {"models": models_info}
 
                 except Exception as e:
                     logger.error("Failed to retrieve models", error=str(e))
-                    return {"error": f"Failed to retrieve models: {str(e)}"}, 500
+                    return {"error": f"Failed to retrieve models: {str(e)}"}
 
             except Exception as e:
                 logger.critical("Unexpected error in get_all_models", error=str(e))
-                return {"error": "Internal server error"}, 500
+                return {"error": "Internal server error"}
 
     @bentoml.api
     async def train_model(self, payload: TrainModelInput):
@@ -365,14 +379,14 @@ class DynamicRegressionService:
         token_payload = self.verify_token(payload.secure_token)
         if not token_payload:
             logger.warning("Authentication failed - invalid token")
-            return {"error": "Authentication failed"}, 401
+            return {"error": "Authentication failed"}
 
         # Decode the CSV bytes
         try:
             csv_bytes = base64.b64decode(payload.csv_bytes)
         except Exception as e:
             logger.error(f"CSV decoding error: {str(e)}")
-            return {"error": f"Failed to decode CSV bytes: {str(e)}"}, 400
+            return {"error": f"Failed to decode CSV bytes: {str(e)}"}
 
         try:
             # Call your training pipeline (this function should match your training logic)
@@ -385,6 +399,7 @@ class DynamicRegressionService:
                 targets,
                 scaler,
                 input_dim,
+                feature_columns,
             ) = train_pipeline_regression(
                 csv_bytes,
                 payload.model_params,
@@ -396,16 +411,18 @@ class DynamicRegressionService:
             r2 = test_metrics["r2"]
         except Exception as e:
             logger.error(f"Training failed: {str(e)}")
-            return {"error": f"Training failed: {str(e)}"}, 500
+            return {"error": f"Training failed: {str(e)}"}
 
         try:
             # Convert model to TorchScript and save with BentoML
             scripted_model = torch.jit.script(model)
+            safe_name = sanitize_tag_name(payload.name)
             bento_model = bentoml.torchscript.save_model(
-                payload.name,
+                safe_name,
                 scripted_model,
                 custom_objects={
                     "scaler": scaler,
+                    "feature_columns": feature_columns,
                     "config": {
                         "input_dim": input_dim,  # Adjust as needed
                         "hidden_dim": payload.model_params.get("hidden_dim"),
@@ -417,7 +434,7 @@ class DynamicRegressionService:
             )
         except Exception as e:
             logger.error(f"Model saving failed: {str(e)}")
-            return {"error": f"Model saving failed: {str(e)}"}, 500
+            return {"error": f"Model saving failed: {str(e)}"}
         logger.success("Model training and saving successful")
         return {
             "status": "success",
@@ -432,14 +449,14 @@ class DynamicRegressionService:
         token_payload = self.verify_token(payload.secure_token)
         if not token_payload:
             logger.warning("Authentication failed - invalid token")
-            return {"error": "Authentication failed"}, 401
+            return {"error": "Authentication failed"}
 
         # Decode the CSV bytes
         try:
             csv_bytes = base64.b64decode(payload.csv_bytes)
         except Exception as e:
             logger.error(f"CSV decoding error: {str(e)}")
-            return {"error": f"Failed to decode CSV bytes: {str(e)}"}, 400
+            return {"error": f"Failed to decode CSV bytes: {str(e)}"}
 
         try:
             # Call your training pipeline (this function should match your training logic)
@@ -452,6 +469,7 @@ class DynamicRegressionService:
                 targets,
                 scaler,
                 input_dim,
+                feature_columns,
             ) = train_xg_boost(
                 csv_bytes,
                 payload.model_params,
@@ -463,21 +481,23 @@ class DynamicRegressionService:
             r2 = test_metrics["r2"]
         except Exception as e:
             logger.error(f"Training failed: {str(e)}")
-            return {"error": f"Training failed: {str(e)}"}, 500
+            return {"error": f"Training failed: {str(e)}"}
 
         try:
             # Convert model to TorchScript and save with BentoML
+            safe_name = sanitize_tag_name(payload.name)
             bento_model = bentoml.xgboost.save_model(
-                payload.name,
+                safe_name,
                 model,
                 custom_objects={
                     "scaler": scaler,
+                    "feature_columns": feature_columns,
                 },
                 labels={"version": payload.version, "description": payload.description},
             )
         except Exception as e:
             logger.error(f"Model saving failed: {str(e)}")
-            return {"error": f"Model saving failed: {str(e)}"}, 500
+            return {"error": f"Model saving failed: {str(e)}"}
         logger.success("Model training and saving successful")
         return {
             "status": "success",
@@ -486,11 +506,22 @@ class DynamicRegressionService:
             "r2": r2,
         }
 
-    def extract_features2(self, input_data: PredictData) -> List[float]:
+    def extract_features2(self, input_data: PredictData, feature_cols=None) -> List[float]:
         """
         Extracts numeric features in the exact order expected by the model.
-        The expected order should match the order used when training (and fitting the scaler).
+        If feature_cols is provided (from training), only those features are extracted.
+        CSV column names use spaces (e.g. 'IKDC pre') while PredictData uses underscores ('IKDC_pre').
         """
+        data_dict = input_data.dict()
+        if feature_cols is not None:
+            # Map CSV-style names (spaces) to Python field names (underscores)
+            try:
+                features = [data_dict[col.replace(" ", "_")] for col in feature_cols]
+            except KeyError as e:
+                logger.error("Missing feature in input data", missing_feature=str(e))
+                raise e
+            return features
+
         expected_order = [
             "sex",
             "age",
@@ -507,7 +538,6 @@ class DynamicRegressionService:
             "medial_tibial_condyle",
             "lateral_femoral_condyle",
         ]
-        data_dict = input_data.dict()
         try:
             features = [data_dict[feature] for feature in expected_order]
         except KeyError as e:
@@ -515,11 +545,20 @@ class DynamicRegressionService:
             raise e
         return features
     
-    def extract_features3(self, input_data: PredictData) -> pd.DataFrame:
+    def extract_features3(self, input_data: PredictData, feature_cols=None) -> pd.DataFrame:
         """
-        Extracts numeric features in the exact order expected by the model.
-        The expected order should match the order used when training (and fitting the scaler).
+        Extracts numeric features as a DataFrame.
+        If feature_cols is provided (from training), only those features are extracted.
         """
+        data_dict = input_data.dict()
+        if feature_cols is not None:
+            try:
+                features = {col: [data_dict[col.replace(" ", "_")]] for col in feature_cols}
+            except KeyError as e:
+                logger.error("Missing feature in input data", missing_feature=str(e))
+                raise e
+            return pd.DataFrame(features)
+
         expected_order = [
             "sex",
             "age",
@@ -536,14 +575,11 @@ class DynamicRegressionService:
             "medial_tibial_condyle",
             "lateral_femoral_condyle",
         ]
-        data_dict = input_data.dict()
-    
         try:
             features = {feature: [data_dict[feature]] for feature in expected_order}
         except KeyError as e:
             logger.error("Missing feature in input data", missing_feature=str(e))
             raise e
-
         return pd.DataFrame(features)
 
     def get_feature_importance(self, model, scaler, feature_names=None):
@@ -583,7 +619,7 @@ class DynamicRegressionService:
             logger.error("Failed to compute feature importance", error=str(e))
             return {"error": "Feature importance computation failed"}
 
-    def get_shap_values(self, model, scaler, features) -> Dict[str, float]:
+    def get_shap_values(self, model, scaler, features, feature_cols=None) -> Dict[str, float]:
         """
         Calculate SHAP values for the given features using the provided model and scaler.
 
@@ -591,6 +627,7 @@ class DynamicRegressionService:
             model: The PyTorch model
             scaler: The scaler used to normalize features
             features: The raw feature values
+            feature_cols: Feature column names from training (optional)
 
         Returns:
             Dictionary mapping feature names to their SHAP values
@@ -603,10 +640,6 @@ class DynamicRegressionService:
                     output = model(tensor_x).cpu().numpy()
                     return np.atleast_1d(output)
 
-            # Create a background dataset for SHAP
-            # This is typically a sample from your training data
-            # For simplicity, we'll use a random sample around the current point
-            # In practice, you should use a representative sample from your training data
             n_background = 100
             feature_array = np.array(features)
             background_data = np.random.normal(
@@ -614,20 +647,17 @@ class DynamicRegressionService:
             )
             background_data = scaler.transform(background_data)
 
-            # Initialize the SHAP explainer
             explainer = shap.KernelExplainer(f, background_data)
 
-            # Calculate SHAP values for the current instance
             transformed_features = scaler.transform([features])
             shap_values = explainer.shap_values(transformed_features)[0]
 
-            # Map SHAP values to feature names
-            # Assuming you have a way to get feature names in the same order as features
-            feature_names = self.get_feature_names()  # Implement this method
+            # Use model's feature columns if available, otherwise fall back
+            names = feature_cols if feature_cols else self.get_feature_names()
 
             return {
-                feature_names[i]: float(shap_values[i])
-                for i in range(len(feature_names))
+                names[i]: float(shap_values[i])
+                for i in range(len(names))
             }
 
         except Exception as e:

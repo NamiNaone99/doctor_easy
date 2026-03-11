@@ -442,10 +442,10 @@ def train_pipeline_regression(
     # Load data (update data_path as needed)
     csv_data = BytesIO(csv_bytes)
     df = pd.read_csv(csv_data)
-    df = df.drop(columns=DROP_COLUMNS)
+    df = df.drop(columns=[c for c in DROP_COLUMNS if c in df.columns], errors='ignore')
 
     # Split into features and target
-    feature_columns = df.drop(columns=[TARGET_COLUMN]).columns
+    feature_columns = df.drop(columns=[TARGET_COLUMN]).columns.tolist()
     X = df.drop(columns=[TARGET_COLUMN]).values
     y = df[TARGET_COLUMN].values
 
@@ -524,6 +524,7 @@ def train_pipeline_regression(
         targets,
         scaler,
         input_dim,
+        feature_columns,
     )
 
 ##################################
@@ -549,9 +550,10 @@ def train_xg_boost(
     # Load CSV data
     csv_data = BytesIO(csv_bytes)
     df = pd.read_csv(csv_data)
-    df = df.drop(columns=DROP_COLUMNS).dropna()
+    df = df.drop(columns=[c for c in DROP_COLUMNS if c in df.columns], errors='ignore').dropna()
     
     # Split features and target
+    feature_columns = df.drop(columns=[TARGET_COLUMN]).columns.tolist()
     X = df.drop(columns=[TARGET_COLUMN]).values
     y = df[TARGET_COLUMN].values
     input_dim = X.shape[1]
@@ -632,4 +634,5 @@ def train_xg_boost(
         targets,
         scaler,
         input_dim,
+        feature_columns,
     )

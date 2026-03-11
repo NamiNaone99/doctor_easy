@@ -63,6 +63,9 @@ async def model_train_endpoint(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    name = name.strip()
+    version = version.strip()
+    description = description.strip()
 
     if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="File must be a CSV")
@@ -109,13 +112,20 @@ async def model_train_endpoint(
             response = await client.post(
                 f"{BENTOML_URL}",
                 json={"payload": payload},
-                timeout=30,
+                timeout=600,
             )
-        logger.error(f"Bentoml URL: {BENTOML_URL}")
+        logger.info(f"BentoML response status: {response.status_code}")
         if response.status_code != 200:
             raise HTTPException(status_code=response.status_code, detail=f"BentoML service error: {response.text}")
 
         bentoml_response = response.json()
+
+        # Handle BentoML error responses (may be list from tuple returns or dict with 'error')
+        if isinstance(bentoml_response, list):
+            error_data = bentoml_response[0] if bentoml_response else {}
+            raise HTTPException(status_code=500, detail=error_data.get("error", "Unknown BentoML error"))
+        if isinstance(bentoml_response, dict) and "error" in bentoml_response:
+            raise HTTPException(status_code=500, detail=bentoml_response["error"])
 
         # Save model record in DB
         db_model = Model(

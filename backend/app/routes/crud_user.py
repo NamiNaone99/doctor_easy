@@ -13,6 +13,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30
 router = APIRouter()
 
 
+@router.get("", response_model=list[UserSchema])
 @router.get("/", response_model=list[UserSchema])
 def all_user(
     db: Session = Depends(get_db), user: UserSchema = Depends(protected_route)
@@ -61,7 +62,7 @@ def update_user(
 
     for key, value in user_data.items():
         if value is not None and value != "":
-            if key is "password":
+            if key == "password":
                 if not is_valid_password(value):
                     raise HTTPException(
                         status_code=400,

@@ -1,0 +1,9 @@
+tunnel: 4b9d604c-423c-4feb-b5c1-f8ccd77ae7ec
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  - hostname: medical.noboru.tech
+    service: http://nginx:80
+    originRequest:
+      noTLSVerify: true
+  - service: http_status:404

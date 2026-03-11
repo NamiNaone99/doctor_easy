@@ -27,28 +27,27 @@ load_dotenv()
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 LOG_PATH = os.getenv("LOG_PATH", "logs/app.log")
+IS_DEV = ENVIRONMENT == "development"
+
 # Create tables (only for development)
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(debug=True)
+app = FastAPI(debug=IS_DEV, root_path="")
 
-# CORS Middleware
+# CORS — load allowed origins from env or use defaults
+_default_origins = "https://medical.noboru.tech,http://localhost:3010,http://localhost:3000"
+ALLOWED_ORIGINS = [
+    o.strip()
+    for o in os.getenv("ALLOWED_ORIGINS", _default_origins).split(",")
+    if o.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://34.226.203.199:3010",
-        "http://localhost:3010",
-        "http://localhost:3000",
-        "http://nextjs:3000",
-        "http://nextjs:3010",
-        "http://localhost:8000",
-        "http://fastapi:8000",
-        "http://34.226.203.199",
-        "https://meniscus-frontend-repo.onrender.com",
-    ],  # Allow Next.js frontend
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-CSRF-Token", "X-Request-ID"],
 )
 # CSRF Protection
 app.add_exception_handler(CsrfProtectError, csrf_protect_exception_handler)

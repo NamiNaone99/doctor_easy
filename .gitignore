@@ -1,1 +1,21 @@
 /pgdata
+
+# Environment files with secrets
+backend/.env
+frontend/.env
+backend/bentoml/.env
+
+# Cloudflare tunnel credentials
+cloudflared/credentials.json
+
+# SQLite databases
+*.db
+
+# Python
+__pycache__/
+*.pyc
+logs/
+
+# Node
+node_modules/
+.next/

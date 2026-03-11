@@ -16,6 +16,7 @@ HOST = os.getenv("BENTOML_HOST")
 BENTOML_URL = f"{HOST}delete_model"
 
 
+@router.get("", response_model=list[AllModelResponse])
 @router.get("/", response_model=list[AllModelResponse])
 def read_models(
     skip: int = 0,

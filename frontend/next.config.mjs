@@ -2,6 +2,7 @@
 import path from "path";
 const __dirname = new URL(".", import.meta.url).pathname;
 const nextConfig = {
+  output: "standalone",
   webpack: (config) => {
     config.resolve.alias = {
       ...config.resolve.alias,
@@ -9,15 +10,18 @@ const nextConfig = {
     };
     return config;
   },
-  // async rewrites() {
-  //   return [
-  //     {
-  //       source: "/api/v1/:path*",
-  //       destination:
-  //         process.env.NEXT_PUBLIC_BACKEND_URL || "http://fastapi:8080/api/v1/:path*",
-  //     },
-  //   ];
-  // },
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "avatars.githubusercontent.com",
+      },
+      {
+        protocol: "https",
+        hostname: "*.public.blob.vercel-storage.com",
+      },
+    ],
+  },
 };
 
 export default nextConfig;

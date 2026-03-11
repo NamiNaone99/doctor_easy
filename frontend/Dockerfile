@@ -1,39 +1,37 @@
-FROM node:18-bullseye-slim
-
-# Set working directory
+# ── Stage 1: Install dependencies ──
+FROM node:18-bullseye-slim AS deps
 WORKDIR /usr/app
+RUN npm install -g pnpm
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+
+# ── Stage 2: Build the Next.js app ──
+FROM node:18-bullseye-slim AS builder
+WORKDIR /usr/app
+RUN npm install -g pnpm
 
 ARG NEXT_PUBLIC_BACKEND_URL
 ENV NEXT_PUBLIC_BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL}
-
 ARG NEXTAUTH_SECRET
 ENV NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
-# Install pnpm globally
-RUN npm install -g pnpm
 
-# Install PM2 globally
-RUN npm install --global pm2
-
-# Copy "pnpm-lock.yaml" and "package.json" before other files
-COPY ./pnpm-lock.yaml ./package.json ./
-
-# Install ALL dependencies (including dev dependencies)
-RUN pnpm install --frozen-lockfile
-
-# Copy all files
-COPY ./ ./
-
-# Build app
+COPY --from=deps /usr/app/node_modules ./node_modules
+COPY . .
 RUN pnpm run build
 
-# Remove dev dependencies
-RUN pnpm prune --prod
+# ── Stage 3: Production runner (minimal) ──
+FROM node:18-bullseye-slim AS runner
+WORKDIR /usr/app
+ENV NODE_ENV=production
 
-# Expose the listening port
+RUN apt-get update && apt-get install -y --no-install-recommends curl && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy standalone server + static/public assets from builder
+COPY --from=builder /usr/app/.next/standalone ./
+COPY --from=builder /usr/app/.next/static ./.next/static
+COPY --from=builder /usr/app/public ./public
+
 EXPOSE 3000
-
-# Run container as non-root (unprivileged) user
 USER node
-
-# Launch app with PM2
-CMD [ "pm2-runtime", "start", "pnpm", "--", "start" ]
+CMD ["node", "server.js"]

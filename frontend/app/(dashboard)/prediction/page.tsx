@@ -167,11 +167,15 @@ export default function PredictionPage() {
       );
 
       const d = response.data;
-      console.log(d[0]?.feature_importance);
-      console.log(d[0]?.prediction);
+      console.log(d?.feature_importance);
+      console.log(d?.prediction);
 
-      if (d[0]?.feature_importance) {
-        const fi = d[0].feature_importance;
+      if (d?.error) {
+        throw new Error(d.error);
+      }
+
+      if (d?.feature_importance) {
+        const fi = d.feature_importance;
         const featureImportanceData = Object.entries(fi).map(
           ([key, value]) => ({
             feature: key,
@@ -181,9 +185,8 @@ export default function PredictionPage() {
         setFeatureImportance(featureImportanceData);
       }
 
-      if (Array.isArray(d) && d[1] === 200) {
-        const predictionValue = d[0]?.prediction;
-        setResult(predictionValue);
+      if (d?.prediction !== undefined) {
+        setResult(d.prediction);
       } else {
         throw new Error('Unexpected response structure');
       }
