@@ -251,10 +251,9 @@ class DynamicRegressionService:
                 try:
                     # Extract features as DataFrame and convert to array for scaling
                     features_df = self.extract_features3(input_data, feature_cols)
-                    features_array = features_df.to_numpy()  # Convert to numpy array
                     
-                    # Scale features
-                    transformed = scaler.transform(features_array)  # Now passing an array
+                    # Scale features (pass DataFrame to match how scaler was fitted)
+                    transformed = scaler.transform(features_df)
                     logger.info("Scaled features", transformed=transformed.tolist())
 
                     # Make prediction
@@ -666,10 +665,14 @@ class DynamicRegressionService:
             return {}
         
     def get_shap_values_xg(self, model, scaler, features):
-        transformed = scaler.transform(features)
-        explainer = shap.TreeExplainer(model)
-        shap_values = explainer.shap_values(transformed)
-        return shap_values.tolist() if hasattr(shap_values, "tolist") else shap_values
+        transformed = scaler.transform(features.to_numpy() if hasattr(features, 'to_numpy') else features)
+        booster = model.get_booster() if hasattr(model, 'get_booster') else model
+        dmatrix = xgboost.DMatrix(np.float32(transformed))
+        # Use XGBoost's native SHAP (pred_contribs) to avoid shap library base_score parsing bug
+        shap_values = booster.predict(dmatrix, pred_contribs=True)
+        # Last column is the bias term, remove it
+        shap_values = shap_values[:, :-1]
+        return shap_values.tolist()
 
     def get_feature_names(self) -> List[str]:
 

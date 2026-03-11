@@ -69,8 +69,8 @@ async def model_train_endpoint(
 
     if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="File must be a CSV")
-    logger.error(f"Host: {HOST}")
-    logger.error(f"Bentoml URL: {BENTOML_URL}")
+    logger.info(f"Host: {HOST}")
+    logger.info(f"Bentoml URL: {BENTOML_URL}")
 
     try:
         # Read CSV content as string

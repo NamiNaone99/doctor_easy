@@ -554,7 +554,7 @@ def train_xg_boost(
     
     # Split features and target
     feature_columns = df.drop(columns=[TARGET_COLUMN]).columns.tolist()
-    X = df.drop(columns=[TARGET_COLUMN]).values
+    X = df.drop(columns=[TARGET_COLUMN])
     y = df[TARGET_COLUMN].values
     input_dim = X.shape[1]
     
